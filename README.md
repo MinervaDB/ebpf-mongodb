@@ -48,7 +48,7 @@ sudo apt-get install -y grafana
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-organization/mongodb-ebpf-monitoring.git
+   git clone https://github.com/MinervaDB/ebpf-mongodb
    cd mongodb-ebpf-monitoring
    ```
 
