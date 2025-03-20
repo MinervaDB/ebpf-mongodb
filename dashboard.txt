@@ -1,0 +1,289 @@
+apiVersion: 1
+
+providers:
+  - name: 'MongoDB eBPF Monitoring'
+    orgId: 1
+    folder: 'MongoDB Monitoring'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+
+dashboards:
+  - name: 'MongoDB Performance Overview'
+    uid: mongodb-perf-overview
+    title: 'MongoDB Performance Overview'
+    tags: ['mongodb', 'ebpf', 'performance']
+    timezone: 'browser'
+    schemaVersion: 16
+    version: 1
+    refresh: '10s'
+    
+    panels:
+      # Query Performance
+      - title: 'Query Duration by Collection'
+        type: 'graph'
+        gridPos: { h: 8, w: 12, x: 0, y: 0 }
+        datasource: 'Prometheus'
+        targets:
+          - expr: 'histogram_quantile(0.95, sum(rate(mongodb_query_duration_seconds_bucket[5m])) by (collection, le))'
+            legendFormat: '{{collection}}'
+        fieldConfig:
+          defaults:
+            unit: 's'
+            color:
+              mode: 'palette-classic'
+        options:
+          legend:
+            show: true
+            placement: 'bottom'
+          tooltip:
+            mode: 'multi'
+            sort: 'desc'
+      
+      # Operation Counts
+      - title: 'MongoDB Operations by Type'
+        type: 'timeseries'
+        gridPos: { h: 8, w: 12, x: 12, y: 0 }
+        datasource: 'Prometheus'
+        targets:
+          - expr: 'sum(rate(mongodb_collection_operations_total[5m])) by (operation)'
+            legendFormat: '{{operation}}'
+        fieldConfig:
+          defaults:
+            unit: 'ops'
+            min: 0
+            color:
+              mode: 'palette-classic'
+        options:
+          legend:
+            showLegend: true
+            placement: 'bottom'
+          tooltip:
+            mode: 'multi'
+            sort: 'desc'
+      
+      # I/O Performance
+      - title: 'Disk I/O'
+        type: 'timeseries'
+        gridPos: { h: 8, w: 12, x: 0, y: 8 }
+        datasource: 'Prometheus'
+        targets:
+          - expr: 'rate(mongodb_io_bytes_total[5m])'
+            legendFormat: '{{operation}}'
+        fieldConfig:
+          defaults:
+            unit: 'bytes'
+            min: 0
+            color:
+              mode: 'palette-classic'
+        options:
+          legend:
+            showLegend: true
+            placement: 'bottom'
+          tooltip:
+            mode: 'multi'
+      
+      # Network Performance
+      - title: 'Network Traffic'
+        type: 'timeseries'
+        gridPos: { h: 8, w: 12, x: 12, y: 8 }
+        datasource: 'Prometheus'
+        targets:
+          - expr: 'rate(mongodb_net_bytes_total[5m])'
+            legendFormat: '{{direction}}'
+        fieldConfig:
+          defaults:
+            unit: 'bytes'
+            min: 0
+            color:
+              mode: 'palette-classic'
+        options:
+          legend:
+            showLegend: true
+            placement: 'bottom'
+          tooltip:
+            mode: 'multi'
+      
+      # Documents Examined vs Returned
+      - title: 'Query Efficiency (Docs Examined/Returned)'
+        type: 'gauge'
+        gridPos: { h: 8, w: 8, x: 0, y: 16 }
+        datasource: 'Prometheus'
+        targets:
+          - expr: 'sum(rate(mongodb_docs_examined_total[5m])) / sum(rate(mongodb_docs_returned_total[5m]))'
+            legendFormat: 'Ratio'
+        fieldConfig:
+          defaults:
+            min: 1
+            max: 100
+            thresholds:
+              steps:
+                - color: 'green'
+                  value: null
+                - color: 'yellow'
+                  value: 50
+                - color: 'orange'
+                  value: 70
+                - color: 'red'
+                  value: 85
+            unit: 'percent'
+        options:
+          orientation: 'auto'
+          showThresholdLabels: false
+          showThresholdMarkers: true
+      
+      # Active Connections
+      - title: 'Active Connections'
+        type: 'stat'
+        gridPos: { h: 4, w: 8, x: 0, y: 24 }
+        datasource: 'Prometheus'
+        targets:
+          - expr: 'mongodb_connections{state="current"}'
+            legendFormat: 'Current'
+        fieldConfig:
+          defaults:
+            color:
+              mode: 'thresholds'
+            thresholds:
+              steps:
+                - color: 'green'
+                  value: null
+                - color: 'yellow'
+                  value: 100
+                - color: 'red'
+                  value: 500
+      
+      # Connection Utilization
+      - title: 'Connection Utilization %'
+        type: 'gauge'
+        gridPos: { h: 4, w: 8, x: 8, y: 24 }
+        datasource: 'Prometheus'
+        targets:
+          - expr: 'mongodb_connections{state="current"} / mongodb_connections{state="available"} * 100'
+            legendFormat: 'Utilization'
+        fieldConfig:
+          defaults:
+            min: 0
+            max: 100
+            thresholds:
+              steps:
+                - color: 'green'
+                  value: null
+                - color: 'yellow'
+                  value: 50
+                - color: 'red'
+                  value: 80
+            unit: 'percent'
+      
+      # Lock Wait Time
+      - title: 'Lock Wait Time'
+        type: 'timeseries'
+        gridPos: { h: 4, w: 8, x: 16, y: 24 }
+        datasource: 'Prometheus'
+        targets:
+          - expr: 'rate(mongodb_locks[5m])'
+            legendFormat: '{{database}} - {{type}}'
+        fieldConfig:
+          defaults:
+            unit: 'none'
+            min: 0
+            color:
+              mode: 'palette-classic'
+      
+      # Slow Queries
+      - title: 'Slow Queries (>100ms)'
+        type: 'table'
+        gridPos: { h: 8, w: 24, x: 0, y: 28 }
+        datasource: 'Prometheus'
+        targets:
+          - expr: 'histogram_quantile(0.95, sum(rate(mongodb_query_duration_seconds_bucket{le="+Inf"}[5m]) - rate(mongodb_query_duration_seconds_bucket{le="0.1"}[5m])) by (collection, operation, le))'
+            format: 'table'
+        transformations:
+          - id: 'organize'
+            options:
+              excludeByName:
+                le: true
+              indexByName:
+                collection: 0
+                operation: 1
+                Value: 2
+              renameByName:
+                Value: 'Duration (s)'
+        fieldConfig:
+          defaults:
+            unit: 's'
+            color:
+              mode: 'thresholds'
+            thresholds:
+              steps:
+                - color: 'yellow'
+                  value: null
+                - color: 'orange'
+                  value: 0.5
+                - color: 'red'
+                  value: 1
+          overrides:
+            - matcher:
+                id: 'byName'
+                options: 'collection'
+              properties:
+                - id: 'custom.width'
+                  value: 200
+            - matcher:
+                id: 'byName'
+                options: 'operation'
+              properties:
+                - id: 'custom.width'
+                  value: 150'
+                  value: 5
+                - color: 'orange'
+                  value: 10
+                - color: 'red'
+                  value: 20
+            unit: 'none'
+        options:
+          orientation: 'auto'
+          showThresholdLabels: false
+          showThresholdMarkers: true
+      
+      # Memory Usage
+      - title: 'Memory Usage'
+        type: 'timeseries'
+        gridPos: { h: 8, w: 8, x: 8, y: 16 }
+        datasource: 'Prometheus'
+        targets:
+          - expr: 'mongodb_memory_bytes'
+            legendFormat: '{{type}}'
+        fieldConfig:
+          defaults:
+            unit: 'bytes'
+            min: 0
+            color:
+              mode: 'palette-classic'
+        options:
+          legend:
+            showLegend: true
+            placement: 'bottom'
+          tooltip:
+            mode: 'multi'
+      
+      # CPU Usage
+      - title: 'CPU Usage'
+        type: 'gauge'
+        gridPos: { h: 8, w: 8, x: 16, y: 16 }
+        datasource: 'Prometheus'
+        targets:
+          - expr: 'mongodb_cpu_percent'
+            legendFormat: 'CPU %'
+        fieldConfig:
+          defaults:
+            min: 0
+            max: 100
+            thresholds:
+              steps:
+                - color: 'green'
+                  value: null
+                - color: 'yellow
